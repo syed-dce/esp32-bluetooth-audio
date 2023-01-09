@@ -483,11 +483,6 @@ void BluetoothA2DPSink::app_alloc_meta_buffer(esp_avrc_ct_cb_param_t *param)
 
 void BluetoothA2DPSink::app_gap_callback(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
 {
-    memcpy(peer_bd_addr, param->cfm_req.bda, ESP_BD_ADDR_LEN);
-    char peer_str[18];
-    addr_to_str(peer_bd_addr, peer_str);
-    ESP_LOGI(BT_AV_TAG, "partner address: %s", peer_str);
-
     switch (event) {
         case ESP_BT_GAP_AUTH_CMPL_EVT: {
             if (param->auth_cmpl.stat == ESP_BT_STATUS_SUCCESS) {
@@ -503,20 +498,22 @@ void BluetoothA2DPSink::app_gap_callback(esp_bt_gap_cb_event_t event, esp_bt_gap
         case ESP_BT_GAP_CFM_REQ_EVT: {
                 ESP_LOGI(BT_AV_TAG, "ESP_BT_GAP_CFM_REQ_EVT Please confirm the passkey: %d", param->cfm_req.num_val);
                 pin_code_int = param->key_notif.passkey;
-                pin_code_request = Confirm;
             }
             break;
 
         case ESP_BT_GAP_KEY_NOTIF_EVT: {
                 ESP_LOGI(BT_AV_TAG, "ESP_BT_GAP_KEY_NOTIF_EVT passkey:%d", param->key_notif.passkey);
                 pin_code_int = param->key_notif.passkey;
-                pin_code_request = Reply;
             }
             break;
 
         case ESP_BT_GAP_KEY_REQ_EVT: {
                 ESP_LOGI(BT_AV_TAG, "ESP_BT_GAP_KEY_REQ_EVT Please enter passkey!");
-                pin_code_request = Reply;
+                memcpy(peer_bd_addr, param->cfm_req.bda, ESP_BD_ADDR_LEN);
+                char peer_str[18];
+                addr_to_str(peer_bd_addr, peer_str);
+                ESP_LOGI(BT_AV_TAG, "partner address: %s", peer_str);
+
             } 
             break;
 
@@ -581,6 +578,12 @@ void  BluetoothA2DPSink::av_hdl_a2d_evt(uint16_t event, void *p_param)
             ESP_LOGD(BT_AV_TAG, "%s ESP_A2D_CONNECTION_STATE_EVT", __func__);
             a2d = (esp_a2d_cb_param_t *)(p_param);
             connection_state = a2d->conn_stat.state;
+
+            // callback
+            if (connection_state_callback!=nullptr){
+                connection_state_callback(connection_state);
+            }
+
             char peer_str[18];
             addr_to_str(a2d->conn_stat.remote_bda, peer_str);
             ESP_LOGI(BT_AV_TAG, "A2DP connection state: %s, [%s]", m_a2d_conn_state_str[a2d->conn_stat.state], peer_str);
@@ -589,7 +592,6 @@ void  BluetoothA2DPSink::av_hdl_a2d_evt(uint16_t event, void *p_param)
                 ESP_LOGI(BT_AV_TAG, "ESP_A2D_CONNECTION_STATE_DISCONNECTED");
                 // reset pin code
                 pin_code_int = 0;
-                pin_code_request = Undefined;
 
                 // call callback
                 if (bt_dis_connected!=nullptr){
@@ -655,6 +657,12 @@ void  BluetoothA2DPSink::av_hdl_a2d_evt(uint16_t event, void *p_param)
             a2d = (esp_a2d_cb_param_t *)(p_param);
             ESP_LOGI(BT_AV_TAG, "A2DP audio state: %s", m_a2d_audio_state_str[a2d->audio_stat.state]);
             m_audio_state = a2d->audio_stat.state;
+
+            // callback
+            if (audio_state_callback!=nullptr){
+                audio_state_callback(m_audio_state);
+            }
+
             if (is_i2s_output){
                 if (ESP_A2D_AUDIO_STATE_STARTED == a2d->audio_stat.state) { 
                     m_pkt_cnt = 0; 
@@ -1187,22 +1195,10 @@ void BluetoothA2DPSink::confirm_pin_code(int code)
   char peer_str[18];
   addr_to_str(peer_bd_addr, peer_str);
 
-  switch(pin_code_request){
-      case Confirm:
-        ESP_LOGI(BT_AV_TAG, "-> %s",  peer_str);
-        if (esp_bt_gap_ssp_confirm_reply(peer_bd_addr, true)!=ESP_OK){
-            ESP_LOGE(BT_AV_TAG,"esp_bt_gap_ssp_passkey_reply");
-        }
-        break;
-      case Reply:
-        ESP_LOGI(BT_AV_TAG, "confirm_pin_code %d -> %s", code, peer_str);
-        if (esp_bt_gap_ssp_passkey_reply(peer_bd_addr, true, code)!=ESP_OK){
-            ESP_LOGE(BT_AV_TAG,"esp_bt_gap_ssp_passkey_reply");
-        }
-        break;
+  ESP_LOGI(BT_AV_TAG, "confirm_pin_code %d -> %s", code, peer_str);
+  if (esp_bt_gap_ssp_passkey_reply(peer_bd_addr, true, code)!=ESP_OK){
+    ESP_LOGE(BT_AV_TAG,"esp_bt_gap_ssp_passkey_reply");
   }
-
-
 }
 
 /**

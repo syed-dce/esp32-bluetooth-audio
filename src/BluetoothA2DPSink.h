@@ -49,8 +49,7 @@ extern "C" void ccall_app_rc_tg_callback(esp_avrc_tg_cb_event_t event, esp_avrc_
 extern "C" void ccall_av_hdl_avrc_tg_evt(uint16_t event, void *p_param);
 #endif    
 
-// defines the mechanism to confirm a pin request
-enum PinCodeRequest {Undefined, Confirm, Reply};
+
 
 /**
  * @brief A2DP Bluethooth Sink - We initialize and start the Bluetooth A2DP Sink. 
@@ -144,6 +143,16 @@ class BluetoothA2DPSink : public BluetoothA2DPCommon {
     /// Set the callback that is called when the BT device is dis_connected
     virtual void set_on_dis_connected2BT(void (*callBack)());
 
+    /// Set the callback that is called when the connection state is changed
+    virtual void set_on_connection_state_changed(void (*callBack)(esp_a2d_connection_state_t state)){
+        connection_state_callback = callBack;
+    }
+
+    /// Set the callback that is called when the audio state is changed
+    virtual void set_on_audio_state_changed(void (*callBack)(esp_a2d_audio_state_t state)){
+        audio_state_callback = callBack;
+    }
+
     /// Allows you to reject unauthorized addresses
     virtual void set_address_validator(bool (*callBack)(esp_bd_addr_t remote_bda)){
         address_validator = callBack;
@@ -197,8 +206,8 @@ class BluetoothA2DPSink : public BluetoothA2DPCommon {
         return pin_code_int;
     }
 
-    /// defines the requested metadata: eg. ESP_AVRC_MD_ATTR_TITLE | ESP_AVRC_MD_ATTR_ARTIST | ESP_AVRC_MD_ATTR_ALBUM | ESP_AVRC_MD_ATTR_TRACK_NUM | ESP_AVRC_MD_ATTR_NUM_TRACKS | ESP_AVRC_MD_ATTR_GENRE | AVRC_MEDIA_ATTR_ID_PLAYING_TIME
-    virtual void set_avrc_metadata_attribute_mask(int flags){
+    // defines the requested metadata: eg. ESP_AVRC_MD_ATTR_TITLE | ESP_AVRC_MD_ATTR_ARTIST | ESP_AVRC_MD_ATTR_ALBUM | ESP_AVRC_MD_ATTR_TRACK_NUM | ESP_AVRC_MD_ATTR_NUM_TRACKS | ESP_AVRC_MD_ATTR_GENRE | AVRC_MEDIA_ATTR_ID_PLAYING_TIME
+    virtual void set_avrc_metadata_attribut_mask(int flags){
         avrc_metadata_flags = flags;
     }
 
@@ -238,7 +247,6 @@ class BluetoothA2DPSink : public BluetoothA2DPCommon {
     bool is_volume_used = false;
     bool s_volume_notify;
     int pin_code_int = 0;
-    PinCodeRequest pin_code_request = Undefined;
     bool is_pin_code_active = false;
     bool is_start_disabled = false;
     int avrc_metadata_flags = ESP_AVRC_MD_ATTR_TITLE | ESP_AVRC_MD_ATTR_ARTIST | ESP_AVRC_MD_ATTR_ALBUM | ESP_AVRC_MD_ATTR_TRACK_NUM | ESP_AVRC_MD_ATTR_NUM_TRACKS | ESP_AVRC_MD_ATTR_GENRE;
@@ -250,6 +258,9 @@ class BluetoothA2DPSink : public BluetoothA2DPCommon {
     void (*avrc_metadata_callback)(uint8_t, const uint8_t*) = nullptr;
     bool (*address_validator)(esp_bd_addr_t remote_bda) = nullptr;
     void (*sample_rate_callback)(uint16_t rate)=nullptr;
+    void (*connection_state_callback)(esp_a2d_connection_state_t state) = nullptr;
+    void (*audio_state_callback)(esp_a2d_audio_state_t state) = nullptr;
+
 
 #ifdef CURRENT_ESP_IDF
     esp_bt_discovery_mode_t discoverability = ESP_BT_GENERAL_DISCOVERABLE;
