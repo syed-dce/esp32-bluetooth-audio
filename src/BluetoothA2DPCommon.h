@@ -23,6 +23,11 @@
 #include <string.h>
 #include <math.h>    
 #include "freertos/FreeRTOS.h" // needed for ESP Arduino < 2.0    
+#include "freertos/timers.h"
+#include "freertos/xtensa_api.h"
+#include "freertos/FreeRTOSConfig.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
 #include "esp_bt.h"
 #include "esp_bt_main.h"
 #include "esp_bt_device.h"
@@ -43,6 +48,7 @@
 
 extern "C" bool btStart();
 extern "C" void delay(long millis);
+extern "C" unsigned long millis();
 
 #endif
 
@@ -78,6 +84,8 @@ typedef struct {
 #define BT_APP_TAG       "BT_API"
 #define APP_RC_CT_TL_GET_CAPS   (0)
 
+
+
 /** 
  * @brief Common Bluetooth A2DP functions 
  * @author  
@@ -96,7 +104,7 @@ class BluetoothA2DPCommon {
 
        /// Prevents that the same method is executed multiple times within the indicated time limit
         virtual void debounce(void(*cb)(void),int ms){
-            if (debounce_ms<millis()){
+            if (debounce_ms < millis()){
                 cb();
                 // new time limit
                 debounce_ms = millis()+ms;
