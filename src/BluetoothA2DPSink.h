@@ -197,6 +197,10 @@ class BluetoothA2DPSink : public BluetoothA2DPCommon {
         avrc_metadata_flags = flags;
     }
 
+    /// swaps the left and right channel
+    virtual void set_swap_lr_channels(bool swap){
+        swap_left_right = swap;
+    }
 
   protected:
     // protected data
@@ -234,6 +238,7 @@ class BluetoothA2DPSink : public BluetoothA2DPCommon {
     void (*avrc_metadata_callback)(uint8_t, const uint8_t*) = nullptr;
     bool (*address_validator)(esp_bd_addr_t remote_bda) = nullptr;
     void (*sample_rate_callback)(uint16_t rate)=nullptr;
+    bool swap_left_right = false;
 
 #ifdef CURRENT_ESP_IDF
     esp_avrc_rn_evt_cap_mask_t s_avrc_peer_rn_cap;
@@ -253,6 +258,9 @@ class BluetoothA2DPSink : public BluetoothA2DPCommon {
     // execute AVRC command
     virtual void execute_avrc_command(int cmd);
 
+    virtual const char* last_bda_nvs_name() {
+        return "last_bda";
+    }
     /**
      * Wrappbed methods called from callbacks
      */
