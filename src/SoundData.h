@@ -18,9 +18,10 @@
 #include <stdbool.h>
 #include <algorithm>    // std::min
 
-
 /**
- *  @brief Utility structure that can be used to split a int32_t up into 2 separate channels with int16_t data.
+ * @brief Utility structure that can be used to split a int32_t up into 2 separate channels with int16_t data.
+ * @author  
+ * @copyright Apache License Version 2
  */
 struct __attribute__((packed)) Frame {
   int16_t channel1;
@@ -29,18 +30,24 @@ struct __attribute__((packed)) Frame {
   Frame(int v=0){
     channel1 = channel2 = v;
   }
+  
+  Frame(int ch1, int ch2){
+    channel1 = ch1;
+    channel2 = ch2;
+  }
+
 };
 
 /**
  * @brief Channel Information
- * 
+ * @author  
+ * @copyright Apache License Version 2
  */
 enum ChannelInfo {
     Both,
     Left,
     Right
 };
-
 
 /**
  * @brief Sound data as byte stream. We support TwoChannelSoundData (uint16_t + uint16_t) and 
@@ -53,13 +60,11 @@ enum ChannelInfo {
  *   - Export -> Export Audio -> Header Raw ; Signed 16 bit PCM
  * - Convert to c file e.g. with "xxd -i file_example_WAV_1MG.raw file_example_WAV_1MG.c"
  *   - add the const qualifier to the array definition. E.g const unsigned char file_example_WAV_1MG_raw[] = {
+ * @author  
+ * @copyright Apache License Version 2
  */
 
 class SoundData {
-    /**
-     * Gets 2Channel data. the len is indicated in bytes
-     * len is in bytes
-     */
   public:
      virtual int32_t get2ChannelData(int32_t pos, int32_t len, uint8_t *data);
      virtual int32_t getData(int32_t pos, Frame &channels);
@@ -78,6 +83,8 @@ class SoundData {
 /**
  * @brief Data is provided in two channels of int16 data: so 
  * len is in 4 byte entries (int16 + int16)
+ * @author  
+ * @copyright Apache License Version 2
  */
 class TwoChannelSoundData : public SoundData {
 public:
@@ -99,7 +106,9 @@ private:
 
 
 /**
- *  @brief 1 Channel data is provided: so Len is 2 byte entries (int16)
+ * @brief 1 Channel data is provided as int16 values
+ * @author  
+ * @copyright Apache License Version 2
  */
 class OneChannelSoundData : public SoundData {
   public:
@@ -108,12 +117,31 @@ class OneChannelSoundData : public SoundData {
     void setData( int16_t *data, int32_t len);
     void setDataRaw( uint8_t* data, int32_t len);
     int32_t getData(int32_t pos, int32_t len, int16_t *data);
-    int32_t getData(int32_t pos, Frame &channels);
+    int32_t getData(int32_t pos, Frame &frame);
     int32_t get2ChannelData(int32_t pos, int32_t len, uint8_t *data);
   private:
     int16_t* data;
     int32_t len;
     ChannelInfo channelInfo;
-
 };
 
+
+/**
+ * @brief 1 Channel data is provided as signed int8 values.
+ * @author  
+ * @copyright Apache License Version 2
+ */
+class OneChannel8BitSoundData : public SoundData {
+  public:
+    OneChannel8BitSoundData(bool loop=false, ChannelInfo channelInfo=Both);
+    OneChannel8BitSoundData(int8_t *data, int32_t len, bool loop=false, ChannelInfo channelInfo=Both);
+    void setData( int8_t *data, int32_t len);
+    void setDataRaw( uint8_t* data, int32_t len);
+    int32_t getData(int32_t pos, int32_t len, int8_t *data);
+    int32_t getData(int32_t pos, Frame &frame);
+    int32_t get2ChannelData(int32_t pos, int32_t len, uint8_t *data);
+  private:
+    int8_t* data;
+    int32_t len;
+    ChannelInfo channelInfo;
+};
