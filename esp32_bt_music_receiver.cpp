@@ -10,6 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+// Copyright 2020  
 // Copyright 2015-2016 Espressif Systems (Shanghai) PTE LTD
 
 
@@ -66,7 +67,7 @@ BlootoothA2DSink::BlootoothA2DSink() {
 BlootoothA2DSink::~BlootoothA2DSink() {
     app_task_shut_down();
 
-    if (i2s_driver_uninstall(i2s_port)!=!= ESP_OK){
+    if (i2s_driver_uninstall(i2s_port)!= ESP_OK){
 	    ESP_LOGE(BT_AV_TAG,"Failed to uninstall i2s");
     } 
     
@@ -135,6 +136,7 @@ void BlootoothA2DSink::start(char* name)
     }
 
 }
+
 
 esp_a2d_audio_state_t BlootoothA2DSink::get_audio_state() {
   return audio_state;

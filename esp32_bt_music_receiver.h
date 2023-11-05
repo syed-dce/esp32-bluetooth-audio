@@ -10,6 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+// Copyright 2020  
 // Copyright 2015-2016 Espressif Systems (Shanghai) PTE LTD
 
 #ifndef A2D_SINK
@@ -96,7 +97,7 @@ class BlootoothA2DSink {
     void av_hdl_a2d_evt(uint16_t event, void *p_param);
     // avrc event handler 
     void av_hdl_avrc_evt(uint16_t event, void *p_param);
-    
+        
   private:
     // private data
     xQueueHandle app_task_queue;
@@ -111,7 +112,7 @@ class BlootoothA2DSink {
     esp_a2d_audio_state_t audio_state;
     esp_a2d_mct_t audio_type;
 
-    // priate methods
+    // private methods
     int init_bluetooth();
     void app_task_start_up(void);
     void app_task_shut_down(void);
