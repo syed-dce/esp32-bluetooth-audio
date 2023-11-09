@@ -20,7 +20,6 @@
  */
 // to support static callback functions
 BluetoothA2DPSink* actualBluetoothA2DPSink;
-i2s_port_t i2s_port; 
 
 // Forward declarations for C Callback functions for ESP32 Framework
 extern "C" void app_task_handler_2(void *arg);
@@ -32,31 +31,8 @@ extern "C" void app_rc_ct_callback_2(esp_avrc_ct_cb_event_t event, esp_avrc_ct_c
  * Constructor
  */
 BluetoothA2DPSink::BluetoothA2DPSink() {
-  actualBluetoothA2DPSink = this;
-  // default i2s port is 0
-  i2s_port = (i2s_port_t) 0;
-
-  // setup default i2s config
-  i2s_config = {
-      .mode = (i2s_mode_t) (I2S_MODE_MASTER | I2S_MODE_TX),
-      .sample_rate = 44100,
-      .bits_per_sample = (i2s_bits_per_sample_t)16,
-      .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
-      .communication_format = (i2s_comm_format_t) (I2S_COMM_FORMAT_I2S | I2S_COMM_FORMAT_I2S_MSB),
-      .intr_alloc_flags = 0, // default interrupt priority
-      .dma_buf_count = 8,
-      .dma_buf_len = 64,
-      .use_apll = false
-  };
-
-  // setup default pins
-  pin_config = {
-      .bck_io_num = 26,
-      .ws_io_num = 25,
-      .data_out_num = 22,
-      .data_in_num = I2S_PIN_NO_CHANGE
-  };
-
+	actualBluetoothA2DPSink = this;
+	output = NULL;
 }
 
 BluetoothA2DPSink::~BluetoothA2DPSink() {
@@ -71,11 +47,6 @@ BluetoothA2DPSink::~BluetoothA2DPSink() {
     if (esp_bluedroid_deinit() != ESP_OK){
         ESP_LOGE(BT_AV_TAG,"Failed to deinit bluetooth");
     }
-
-    ESP_LOGI(BT_AV_TAG,"uninstall its");
-    if (i2s_driver_uninstall(i2s_port) != ESP_OK){
-        ESP_LOGE(BT_AV_TAG,"Failed to uninstall i2s");
-    }
     
     ESP_LOGI(BT_AV_TAG,"esp_bt_controller_deinit");
 	if (esp_bt_controller_deinit()!= ESP_OK){
@@ -89,37 +60,29 @@ BluetoothA2DPSink::~BluetoothA2DPSink() {
 
 }
 
-
-void BluetoothA2DPSink::set_pin_config(i2s_pin_config_t pin_config){
-  this->pin_config = pin_config;
-}
-
-void BluetoothA2DPSink::set_i2s_port(i2s_port_t i2s_num) {
-  i2s_port = i2s_num;
-}
-
-void BluetoothA2DPSink::set_i2s_config(i2s_config_t i2s_config){
-  this->i2s_config = i2s_config;
-}
-
 void BluetoothA2DPSink::set_on_data_received(void (*callBack)()){
   this->data_received = callBack;
 }
 
-
-
 /**
  * Main function to start the Bluetooth Processing
  */
-void BluetoothA2DPSink::start(char* name)
+void BluetoothA2DPSink::start(char* name, SPDIFOut *output)
 {
-    ESP_LOGD(BT_AV_TAG, "%s", __func__);
+	ESP_LOGD(BT_AV_TAG, "%s", __func__);
     //store parameters
     if (name) {
       this->bt_name = name;
     }
     ESP_LOGI(BT_AV_TAG,"Device name will be set to '%s'",this->bt_name);
-    
+	this->output = output;
+	output->SetBitsPerSample(32);
+    output->SetChannels(2);
+
+    if (!output->begin()){
+		ESP_LOGE(BT_AV_TAG,"SPDIF output begin error!");
+	}
+	
     // setup bluetooth
     init_bluetooth();
     
@@ -136,18 +99,6 @@ void BluetoothA2DPSink::start(char* name)
 
     // Bluetooth device name, connection mode and profile set up 
     app_work_dispatch(av_hdl_stack_evt_2, BT_APP_EVT_STACK_UP, NULL, 0);
-
-    // setup i2s
-    i2s_driver_install(i2s_port, &i2s_config, 0, NULL);
-
-    // pins are only relevant when music is not sent to internal DAC
-    if (i2s_config.mode & I2S_MODE_DAC_BUILT_IN) {
-      ESP_LOGI(BT_AV_TAG, "Output will go to DAC pins");
-      i2s_set_pin(i2s_port, NULL);      
-    } else {
-      i2s_set_pin(i2s_port, &pin_config);
-    }
-
 }
 
 esp_a2d_audio_state_t BluetoothA2DPSink::get_audio_state() {
@@ -358,24 +309,21 @@ void  BluetoothA2DPSink::av_hdl_a2d_evt(uint16_t event, void *p_param)
         ESP_LOGI(BT_AV_TAG, "a2dp audio_cfg_cb , codec type %d", a2d->audio_cfg.mcc.type);
         // for now only SBC stream is supported
         if (a2d->audio_cfg.mcc.type == ESP_A2D_MCT_SBC) {
-            i2s_config.sample_rate = 16000;
+			ESP_LOGI(BT_AV_TAG,"Sample rate: 16000");
             char oct0 = a2d->audio_cfg.mcc.cie.sbc[0];
             if (oct0 & (0x01 << 6)) {
-                i2s_config.sample_rate = 32000;
+				ESP_LOGD(BT_AV_TAG,"Sample rate: 32000");
             } else if (oct0 & (0x01 << 5)) {
-                i2s_config.sample_rate = 44100;
+				ESP_LOGD(BT_AV_TAG,"Sample rate: 44100");
             } else if (oct0 & (0x01 << 4)) {
-                i2s_config.sample_rate = 48000;
+				ESP_LOGD(BT_AV_TAG,"Sample rate: 48000");
             }
-            
-            i2s_set_clk(i2s_port, i2s_config.sample_rate, i2s_config.bits_per_sample, (i2s_channel_t)2);
 
-            ESP_LOGI(BT_AV_TAG, "configure audio player %x-%x-%x-%x\n",
+            ESP_LOGD(BT_AV_TAG, "configure audio player %x-%x-%x-%x\n",
                      a2d->audio_cfg.mcc.cie.sbc[0],
                      a2d->audio_cfg.mcc.cie.sbc[1],
                      a2d->audio_cfg.mcc.cie.sbc[2],
                      a2d->audio_cfg.mcc.cie.sbc[3]);
-            ESP_LOGI(BT_AV_TAG, "audio player configured, samplerate=%d", i2s_config.sample_rate);
         }
         break;
     }
@@ -508,41 +456,41 @@ void  BluetoothA2DPSink::app_a2d_callback(esp_a2d_cb_event_t event, esp_a2d_cb_p
     }
 }
 
-
-
-
 void  BluetoothA2DPSink::audio_data_callback(const uint8_t *data, uint32_t len) {
-    ESP_LOGD(BT_AV_TAG, "%s", __func__);
-
-    // special case for internal DAC output, the incomming PCM buffer needs 
-    // to be converted from signed 16bit to unsigned
-    if (this->i2s_config.mode & I2S_MODE_DAC_BUILT_IN) {
-  
-        //HACK: this is here to remove the const restriction to replace the data in place as per
-        //https://github.com/espressif/esp-idf/blob/178b122/components/bt/host/bluedroid/api/include/api/esp_a2dp_api.h
-        //the buffer is anyway static block of memory possibly overwritten by next incomming data.
-
-        uint16_t* corr_data = (uint16_t*) data;
-        for (int i=0; i<len/2; i++) {
-            int16_t sample = data[i*2] | data[i*2+1]<<8;
-            corr_data[i]= sample + 0x8000;
-        }
-    }
-
-   size_t i2s_bytes_written;
-   if (i2s_write(i2s_port,(void*) data, len, &i2s_bytes_written, portMAX_DELAY)!=ESP_OK){
-      ESP_LOGE(BT_AV_TAG, "i2s_write has failed");    
-   }
-
-   if (i2s_bytes_written<len){
-      ESP_LOGE(BT_AV_TAG, "Timeout: not all bytes were written to I2S");
-   } 
-   
-   if (data_received!=NULL){
-   	  data_received();
-   }
+	uint16_t *data16 = (uint16_t *) data;
+	for (int j=0;j<len/2;j+=2) {
+		sample[0] = data16[j];
+		sample[1] = data16[j+1];
+		output->ConsumeSample(sample);
+	}
 }
 
+void BluetoothA2DPSink::sendCommand(BT_CMND cmnd){
+	switch(cmnd){
+		case PLAY:
+			esp_avrc_ct_send_passthrough_cmd(0, ESP_AVRC_PT_CMD_PLAY, ESP_AVRC_PT_CMD_STATE_PRESSED);
+			break;
+			
+		case PAUSE:
+			esp_avrc_ct_send_passthrough_cmd(0, ESP_AVRC_PT_CMD_PAUSE, ESP_AVRC_PT_CMD_STATE_PRESSED);
+			break;
+			
+		case STOP:
+			esp_avrc_ct_send_passthrough_cmd(0, ESP_AVRC_PT_CMD_STOP, ESP_AVRC_PT_CMD_STATE_PRESSED);
+			break;
+			
+		case NEXT:
+			esp_avrc_ct_send_passthrough_cmd(0, ESP_AVRC_PT_CMD_FORWARD, ESP_AVRC_PT_CMD_STATE_PRESSED);
+			break;
+			
+		case PREV:
+			esp_avrc_ct_send_passthrough_cmd(0, ESP_AVRC_PT_CMD_BACKWARD, ESP_AVRC_PT_CMD_STATE_PRESSED);
+			break;
+		
+		default:
+			break;
+	}
+}
 
 /**
  * C Callback Functions needed for the ESP32 API
@@ -554,7 +502,7 @@ extern "C" void app_task_handler_2(void *arg) {
 }
 
 extern "C" void audio_data_callback_2(const uint8_t *data, uint32_t len) {
-  //ESP_LOGD(BT_AV_TAG, "%s", __func__);
+  ESP_LOGD(BT_AV_TAG, "%s", __func__);
   if (actualBluetoothA2DPSink)
     actualBluetoothA2DPSink->audio_data_callback(data,len);
 }
