@@ -102,10 +102,6 @@ void BluetoothA2DPSink::set_i2s_config(i2s_config_t i2s_config){
   this->i2s_config = i2s_config;
 }
 
-void BluetoothA2DPSink::set_stream_reader(void (*callBack)(const uint8_t*, uint32_t)){
-  this->stream_reader = callBack;
-}
-
 void BluetoothA2DPSink::set_on_data_received(void (*callBack)()){
   this->data_received = callBack;
 }
@@ -512,8 +508,26 @@ void  BluetoothA2DPSink::app_a2d_callback(esp_a2d_cb_event_t event, esp_a2d_cb_p
     }
 }
 
+
+
+
 void  BluetoothA2DPSink::audio_data_callback(const uint8_t *data, uint32_t len) {
-   ESP_LOGD(BT_AV_TAG, "%s", __func__);
+    ESP_LOGD(BT_AV_TAG, "%s", __func__);
+
+    // special case for internal DAC output, the incomming PCM buffer needs 
+    // to be converted from signed 16bit to unsigned
+    if (this->i2s_config.mode & I2S_MODE_DAC_BUILT_IN) {
+  
+        //HACK: this is here to remove the const restriction to replace the data in place as per
+        //https://github.com/espressif/esp-idf/blob/178b122/components/bt/host/bluedroid/api/include/api/esp_a2dp_api.h
+        //the buffer is anyway static block of memory possibly overwritten by next incomming data.
+
+        uint16_t* corr_data = (uint16_t*) data;
+        for (int i=0; i<len/2; i++) {
+            int16_t sample = data[i*2] | data[i*2+1]<<8;
+            corr_data[i]= sample + 0x8000;
+        }
+    }
 
    size_t i2s_bytes_written;
    if (i2s_write(i2s_port,(void*) data, len, &i2s_bytes_written, portMAX_DELAY)!=ESP_OK){
@@ -522,11 +536,7 @@ void  BluetoothA2DPSink::audio_data_callback(const uint8_t *data, uint32_t len) 
 
    if (i2s_bytes_written<len){
       ESP_LOGE(BT_AV_TAG, "Timeout: not all bytes were written to I2S");
-   }
-   
-   if (stream_reader!=NULL){
-   	  stream_reader(data, len);
-   }
+   } 
    
    if (data_received!=NULL){
    	  data_received();
