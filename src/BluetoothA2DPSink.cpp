@@ -10,6 +10,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+// Copyright 2020  
 // Copyright 2015-2016 Espressif Systems (Shanghai) PTE LTD
 
 
@@ -176,19 +177,25 @@ int BluetoothA2DPSink::init_bluetooth()
     return false;
   }
   ESP_LOGI(BT_AV_TAG,"controller initialized");
- 
-  if (esp_bluedroid_init() != ESP_OK) {
-    ESP_LOGE(BT_AV_TAG,"Failed to initialize bluedroid");
-    return false;
+
+  esp_bluedroid_status_t bt_stack_status = esp_bluedroid_get_status();
+
+  if(bt_stack_status == ESP_BLUEDROID_STATUS_UNINITIALIZED){
+    if (esp_bluedroid_init() != ESP_OK) {
+        ESP_LOGE(BT_AV_TAG,"Failed to initialize bluedroid");
+        return false;
+    }
+    ESP_LOGI(BT_AV_TAG,"bluedroid initialized");
   }
-  ESP_LOGI(BT_AV_TAG,"bluedroid initialized");
  
-  if (esp_bluedroid_enable() != ESP_OK) {
-    ESP_LOGE(BT_AV_TAG,"Failed to enable bluedroid");
-    return false;
+  if(bt_stack_status != ESP_BLUEDROID_STATUS_ENABLED){
+    if (esp_bluedroid_enable() != ESP_OK) {
+        ESP_LOGE(BT_AV_TAG,"Failed to enable bluedroid");
+        return false;
+    }
+    ESP_LOGI(BT_AV_TAG,"bluedroid enabled"); 
   }
-  ESP_LOGI(BT_AV_TAG,"bluedroid enabled");
- 
+
 }
 
 bool BluetoothA2DPSink::app_work_dispatch(app_callback_t p_cback, uint16_t event, void *p_params, int param_len)
@@ -355,7 +362,14 @@ void  BluetoothA2DPSink::av_hdl_a2d_evt(uint16_t event, void *p_param)
 				ESP_LOGI(BT_AV_TAG,"Connection try number: %d", connectionTries);
 				connectToLastDevice();
 			}
-			else esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE);
+			else{
+                if ( *lastBda != NULL && a2d->conn_stat.disc_rsn == ESP_A2D_DISC_RSN_NORMAL ){
+                    esp_bd_addr_t cleanBda = {NULL};
+                    setLastBda(cleanBda, sizeof(cleanBda));
+                    ESP_LOGI(BT_AV_TAG,"Cleanly disconnected");
+                }
+                esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE);
+            }
         } else if (a2d->conn_stat.state == ESP_A2D_CONNECTION_STATE_CONNECTED){
 			ESP_LOGI(BT_AV_TAG, "ESP_A2D_CONNECTION_STATE_CONNECTED");
             esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_NONE);
@@ -456,6 +470,11 @@ void  BluetoothA2DPSink::av_hdl_avrc_evt(uint16_t event, void *p_param)
     }
     case ESP_AVRC_CT_METADATA_RSP_EVT: {
         ESP_LOGI(BT_AV_TAG, "AVRC metadata rsp: attribute id 0x%x, %s", rc->meta_rsp.attr_id, rc->meta_rsp.attr_text);
+        // call metadata callback if available
+        if (avrc_metadata_callback != nullptr){
+            avrc_metadata_callback(rc->meta_rsp.attr_id, rc->meta_rsp.attr_text);
+        }
+
         free(rc->meta_rsp.attr_text);
         break;
     }
