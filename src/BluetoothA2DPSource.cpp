@@ -235,8 +235,8 @@ bool BluetoothA2DPSource::bt_app_work_dispatch(bt_app_cb_t p_cback, uint16_t eve
 {
     ESP_LOGD(BT_APP_CORE_TAG, "%s event 0x%x, param len %d", __func__, event, param_len);
 
-    bt_app_msg_t msg;
-    memset(&msg, 0, sizeof(bt_app_msg_t));
+    app_msg_t msg;
+    memset(&msg, 0, sizeof(app_msg_t));
 
     msg.sig = BT_APP_SIG_WORK_DISPATCH;
     msg.event = event;
@@ -258,7 +258,7 @@ bool BluetoothA2DPSource::bt_app_work_dispatch(bt_app_cb_t p_cback, uint16_t eve
     return false;
 }
 
-bool BluetoothA2DPSource::bt_app_send_msg(bt_app_msg_t *msg)
+bool BluetoothA2DPSource::bt_app_send_msg(app_msg_t *msg)
 {
     if (msg == NULL) {
         return false;
@@ -271,7 +271,7 @@ bool BluetoothA2DPSource::bt_app_send_msg(bt_app_msg_t *msg)
     return true;
 }
 
-void BluetoothA2DPSource::bt_app_work_dispatched(bt_app_msg_t *msg)
+void BluetoothA2DPSource::bt_app_work_dispatched(app_msg_t *msg)
 {
     if (msg->cb) {
         msg->cb(msg->event, msg->param);
@@ -280,7 +280,7 @@ void BluetoothA2DPSource::bt_app_work_dispatched(bt_app_msg_t *msg)
 
 void BluetoothA2DPSource::bt_app_task_handler(void *arg)
 {
-    bt_app_msg_t msg;
+    app_msg_t msg;
     for (;;) {
         if (pdTRUE == xQueueReceive(s_bt_app_task_queue, &msg, (portTickType)portMAX_DELAY)) {
             ESP_LOGD(BT_APP_CORE_TAG, "%s, sig 0x%x, 0x%x", __func__, msg.sig, msg.event);
@@ -302,7 +302,7 @@ void BluetoothA2DPSource::bt_app_task_handler(void *arg)
 
 void BluetoothA2DPSource::bt_app_task_start_up(void)
 {
-    s_bt_app_task_queue = xQueueCreate(10, sizeof(bt_app_msg_t));
+    s_bt_app_task_queue = xQueueCreate(10, sizeof(app_msg_t));
     xTaskCreate(ccall_bt_app_task_handler, "BtAppT", 2048, NULL, configMAX_PRIORITIES - 3, &s_bt_app_task_handle);
     return;
 }
@@ -428,124 +428,128 @@ void BluetoothA2DPSource::filter_inquiry_scan_result(esp_bt_gap_cb_param_t *para
 void BluetoothA2DPSource::bt_app_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
 {
     switch (event) {
-    case ESP_BT_GAP_DISC_RES_EVT: {
-        filter_inquiry_scan_result(param);
-        break;
-    }
-    case ESP_BT_GAP_DISC_STATE_CHANGED_EVT: {
-        if (param->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STOPPED) {
-            if (s_a2d_state == APP_AV_STATE_DISCOVERED) {
-                s_a2d_state = APP_AV_STATE_CONNECTING;
-                ESP_LOGI(BT_AV_TAG, "Device discovery stopped.");
-                ESP_LOGI(BT_AV_TAG, "a2dp connecting to peer: %s", s_peer_bdname);
-                esp_a2d_source_connect(s_peer_bda);
-            } else {
-                // not discovered, continue to discover
-                ESP_LOGI(BT_AV_TAG, "Device discovery failed, continue to discover...");
-                esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY, 10, 0);
+        case ESP_BT_GAP_DISC_RES_EVT: {
+            filter_inquiry_scan_result(param);
+            break;
+        }
+        case ESP_BT_GAP_DISC_STATE_CHANGED_EVT: {
+            if (param->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STOPPED) {
+                if (s_a2d_state == APP_AV_STATE_DISCOVERED) {
+                    s_a2d_state = APP_AV_STATE_CONNECTING;
+                    ESP_LOGI(BT_AV_TAG, "Device discovery stopped.");
+                    ESP_LOGI(BT_AV_TAG, "a2dp connecting to peer: %s", s_peer_bdname);
+                    esp_a2d_source_connect(s_peer_bda);
+                } else {
+                    // not discovered, continue to discover
+                    ESP_LOGI(BT_AV_TAG, "Device discovery failed, continue to discover...");
+                    esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY, 10, 0);
+                }
+            } else if (param->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STARTED) {
+                ESP_LOGI(BT_AV_TAG, "Discovery started.");
             }
-        } else if (param->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STARTED) {
-            ESP_LOGI(BT_AV_TAG, "Discovery started.");
+            break;
         }
-        break;
-    }
-    case ESP_BT_GAP_RMT_SRVCS_EVT:
-    case ESP_BT_GAP_RMT_SRVC_REC_EVT:
-        break;
-    case ESP_BT_GAP_AUTH_CMPL_EVT: {
-        if (param->auth_cmpl.stat == ESP_BT_STATUS_SUCCESS) {
-            ESP_LOGI(BT_AV_TAG, "authentication success: %s", param->auth_cmpl.device_name);
-            esp_log_buffer_hex(BT_AV_TAG, param->auth_cmpl.bda, ESP_BD_ADDR_LEN);
-        } else {
-            ESP_LOGE(BT_AV_TAG, "authentication failed, status:%d", param->auth_cmpl.stat);
+        case ESP_BT_GAP_RMT_SRVCS_EVT:
+        case ESP_BT_GAP_RMT_SRVC_REC_EVT:
+            break;
+        case ESP_BT_GAP_AUTH_CMPL_EVT: {
+            if (param->auth_cmpl.stat == ESP_BT_STATUS_SUCCESS) {
+                ESP_LOGI(BT_AV_TAG, "authentication success: %s", param->auth_cmpl.device_name);
+                esp_log_buffer_hex(BT_AV_TAG, param->auth_cmpl.bda, ESP_BD_ADDR_LEN);
+            } else {
+                ESP_LOGE(BT_AV_TAG, "authentication failed, status:%d", param->auth_cmpl.stat);
+            }
+            break;
         }
-        break;
-    }
-    case ESP_BT_GAP_PIN_REQ_EVT: {
-        ESP_LOGI(BT_AV_TAG, "ESP_BT_GAP_PIN_REQ_EVT min_16_digit:%d", param->pin_req.min_16_digit);
-        if (param->pin_req.min_16_digit) {
-            ESP_LOGI(BT_AV_TAG, "Input pin code: 0000 0000 0000 0000");
-            esp_bt_pin_code_t pin_code = {0};
-            esp_bt_gap_pin_reply(param->pin_req.bda, true, 16, pin_code);
-        } else {
-            ESP_LOGI(BT_AV_TAG, "Input pin code: 1234");
-            esp_bt_gap_pin_reply(param->pin_req.bda, true, pin_code_len, pin_code);
+        case ESP_BT_GAP_PIN_REQ_EVT: {
+            ESP_LOGI(BT_AV_TAG, "ESP_BT_GAP_PIN_REQ_EVT min_16_digit:%d", param->pin_req.min_16_digit);
+            if (param->pin_req.min_16_digit) {
+                ESP_LOGI(BT_AV_TAG, "Input pin code: 0000 0000 0000 0000");
+                esp_bt_pin_code_t pin_code = {0};
+                esp_bt_gap_pin_reply(param->pin_req.bda, true, 16, pin_code);
+            } else {
+                ESP_LOGI(BT_AV_TAG, "Input pin code: 1234");
+                esp_bt_gap_pin_reply(param->pin_req.bda, true, pin_code_len, pin_code);
+            }
+            break;
         }
-        break;
-    }
 
-    case ESP_BT_GAP_CFM_REQ_EVT:
-        if (!ssp_enabled) break;
-        ESP_LOGI(BT_AV_TAG, "ESP_BT_GAP_CFM_REQ_EVT Please compare the numeric value: %d", param->cfm_req.num_val);
-        esp_bt_gap_ssp_confirm_reply(param->cfm_req.bda, true);
-        break;
-    case ESP_BT_GAP_KEY_NOTIF_EVT:
-        if (!ssp_enabled) break;
-        ESP_LOGI(BT_AV_TAG, "ESP_BT_GAP_KEY_NOTIF_EVT passkey:%d", param->key_notif.passkey);
-        break;
-    case ESP_BT_GAP_KEY_REQ_EVT:
-        if (!ssp_enabled) break;
-        ESP_LOGI(BT_AV_TAG, "ESP_BT_GAP_KEY_REQ_EVT Please enter passkey!");
-        break;
+        case ESP_BT_GAP_CFM_REQ_EVT:
+            if (!ssp_enabled) break;
+            ESP_LOGI(BT_AV_TAG, "ESP_BT_GAP_CFM_REQ_EVT Please compare the numeric value: %d", param->cfm_req.num_val);
+            esp_bt_gap_ssp_confirm_reply(param->cfm_req.bda, true);
+            break;
+        case ESP_BT_GAP_KEY_NOTIF_EVT:
+            if (!ssp_enabled) break;
+            ESP_LOGI(BT_AV_TAG, "ESP_BT_GAP_KEY_NOTIF_EVT passkey:%d", param->key_notif.passkey);
+            break;
+        case ESP_BT_GAP_KEY_REQ_EVT:
+            if (!ssp_enabled) break;
+            ESP_LOGI(BT_AV_TAG, "ESP_BT_GAP_KEY_REQ_EVT Please enter passkey!");
+            break;
 
-    // case ESP_BT_GAP_MODE_CHG_EVT:
-    //     ESP_LOGI(BT_AV_TAG, "ESP_BT_GAP_MODE_CHG_EVT mode:%d", param->mode_chg.mode);
-    //     break;
+        // case ESP_BT_GAP_MODE_CHG_EVT:
+        //     ESP_LOGI(BT_AV_TAG, "ESP_BT_GAP_MODE_CHG_EVT mode:%d", param->mode_chg.mode);
+        //     break;
 
-    default: {
-        ESP_LOGI(BT_AV_TAG, "event: %d", event);
-        break;
-    }
+        default: {
+            ESP_LOGI(BT_AV_TAG, "event: %d", event);
+            break;
+        }
     }
     return;
 }
 
 void BluetoothA2DPSource::bt_av_hdl_stack_evt(uint16_t event, void *p_param)
 {
-    ESP_LOGD(BT_AV_TAG, "%s evt %d", __func__, event);
+    ESP_LOGD(BT_AV_TAG, "bt_av_hdl_stack_evt evt %d",  event);
     switch (event) {
-    case BT_APP_EVT_STACK_UP: {
-        /* set up device name */
-        char *dev_name = "ESP_A2DP_SRC";
-        esp_bt_dev_set_device_name(dev_name);
+        case BT_APP_EVT_STACK_UP: {
+            /* set up device name */
+            char *dev_name = "ESP_A2DP_SRC";
+            esp_bt_dev_set_device_name(dev_name);
 
-        /* register GAP callback function */
-        esp_bt_gap_register_callback(ccall_bt_app_gap_cb);
+            /* register GAP callback function */
+            esp_bt_gap_register_callback(ccall_bt_app_gap_cb);
 
-        /* initialize AVRCP controller */
-        esp_avrc_ct_init();
-        esp_avrc_ct_register_callback(ccall_bt_app_rc_ct_cb);
+            /* initialize AVRCP controller */
+            esp_avrc_ct_init();
+            esp_avrc_ct_register_callback(ccall_bt_app_rc_ct_cb);
 
-        //esp_avrc_rn_evt_cap_mask_t evt_set = {0};
-        //esp_avrc_rn_evt_bit_mask_operation(ESP_AVRC_BIT_MASK_OP_SET, &evt_set, ESP_AVRC_RN_VOLUME_CHANGE);
-        //assert(esp_avrc_tg_set_rn_evt_cap(&evt_set) == ESP_OK);
+            //esp_avrc_rn_evt_cap_mask_t evt_set = {0};
+            //esp_avrc_rn_evt_bit_mask_operation(ESP_AVRC_BIT_MASK_OP_SET, &evt_set, ESP_AVRC_RN_VOLUME_CHANGE);
+            //assert(esp_avrc_tg_set_rn_evt_cap(&evt_set) == ESP_OK);
 
-        /* initialize A2DP source */
-        esp_a2d_register_callback(&ccall_bt_app_a2d_cb);
-        esp_a2d_source_register_data_callback(ccall_bt_app_a2d_data_cb);
-        esp_a2d_source_init();
+            /* initialize A2DP source */
+            esp_a2d_register_callback(&ccall_bt_app_a2d_cb);
+            esp_a2d_source_register_data_callback(ccall_bt_app_a2d_data_cb);
+            esp_a2d_source_init();
 
-        /* set discoverable and connectable mode */
-        //esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
-        esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE);
+            /* set discoverable and connectable mode */
+#ifdef CURRENT_ESP_IDF
+            esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
+#else
+            esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE);
+#endif
 
-        /* start device discovery */
-        ESP_LOGI(BT_AV_TAG, "Starting device discovery...");
-        s_a2d_state = APP_AV_STATE_DISCOVERING;
-        esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY, 10, 0);
+            /* start device discovery */
+            ESP_LOGI(BT_AV_TAG, "Starting device discovery...");
+            s_a2d_state = APP_AV_STATE_DISCOVERING;
+            esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY, 10, 0);
 
-        /* create and start heart beat timer */
-        do {
-            int tmr_id = 0;
-            s_tmr = xTimerCreate("connTmr", (10000 / portTICK_RATE_MS),
-                               pdTRUE, (void *)tmr_id, ccall_a2d_app_heart_beat);
-            xTimerStart(s_tmr, portMAX_DELAY);
-        } while (0);
-        break;
-    }
-    default:
-        ESP_LOGE(BT_AV_TAG, "%s unhandled evt %d", __func__, event);
-        break;
+            /* create and start heart beat timer */
+            do {
+                int tmr_id = 0;
+                s_tmr = xTimerCreate("connTmr", (10000 / portTICK_RATE_MS),
+                                pdTRUE, (void *)tmr_id, ccall_a2d_app_heart_beat);
+                xTimerStart(s_tmr, portMAX_DELAY);
+            } while (0);
+            break;
+        }
+
+        default:
+            ESP_LOGE(BT_AV_TAG, "%s unhandled evt %d", __func__, event);
+            break;
     }
 }
 
@@ -618,8 +622,11 @@ void BluetoothA2DPSource::bt_app_av_state_connecting(uint16_t event, void *param
             ESP_LOGI(BT_AV_TAG, "a2dp connected");
             s_a2d_state =  APP_AV_STATE_CONNECTED;
             s_media_state = APP_AV_MEDIA_STATE_IDLE;
-            //esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
+#ifdef CURRENT_ESP_IDF
+            esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
+#else
             esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_NONE);
+#endif
         } else if (a2d->conn_stat.state == ESP_A2D_CONNECTION_STATE_DISCONNECTED) {
             s_a2d_state =  APP_AV_STATE_UNCONNECTED;
         }
@@ -717,8 +724,11 @@ void BluetoothA2DPSource::bt_app_av_state_connected(uint16_t event, void *param)
         if (a2d->conn_stat.state == ESP_A2D_CONNECTION_STATE_DISCONNECTED) {
             ESP_LOGI(BT_AV_TAG, "a2dp disconnected");
             s_a2d_state = APP_AV_STATE_UNCONNECTED;
-            //esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
+#ifdef CURRENT_ESP_IDF
+            esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
+#else
             esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE);
+#endif
 
         }
         break;
@@ -753,8 +763,11 @@ void BluetoothA2DPSource::bt_app_av_state_disconnecting(uint16_t event, void *pa
         if (a2d->conn_stat.state == ESP_A2D_CONNECTION_STATE_DISCONNECTED) {
             ESP_LOGI(BT_AV_TAG, "a2dp disconnected");
             s_a2d_state =  APP_AV_STATE_UNCONNECTED;
-            //esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
+#ifdef CURRENT_ESP_IDF
+            esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
+#else
             esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE);
+#endif
 
         }
         break;
