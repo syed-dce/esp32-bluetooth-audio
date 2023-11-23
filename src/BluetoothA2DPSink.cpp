@@ -203,6 +203,10 @@ esp_a2d_connection_state_t BluetoothA2DPSink::get_connection_state() {
     return connection_state;
 }
 
+bool BluetoothA2DPSink::isConnected() {
+    return connection_state == ESP_A2D_CONNECTION_STATE_CONNECTED;
+}
+
 esp_a2d_mct_t BluetoothA2DPSink::get_audio_type() {
     return audio_type;
 }
@@ -288,7 +292,7 @@ void BluetoothA2DPSink::app_task_handler(void *arg)
     ESP_LOGD(BT_AV_TAG, "%s", __func__);
     app_msg_t msg;
     while (true) {
-        if (app_task_queue==NULL){
+        if (!app_task_queue){
             ESP_LOGE(BT_APP_CORE_TAG, "%s, app_task_queue is null", __func__);
             delay(100);
         } else if (pdTRUE == xQueueReceive(app_task_queue, &msg, (portTickType)portMAX_DELAY)) {
@@ -412,22 +416,14 @@ void  BluetoothA2DPSink::av_hdl_a2d_evt(uint16_t event, void *p_param)
                         if ( *last_connection != NULL && a2d->conn_stat.disc_rsn == ESP_A2D_DISC_RSN_NORMAL ){
                             clean_last_connection();
                         }
-#ifdef CURRENT_ESP_IDF
-                        if (esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, discoverability)!=ESP_OK){
-#else
-                        if (esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE)!=ESP_OK){
-#endif
-                            ESP_LOGE(BT_AV_TAG,"esp_bt_gap_set_scan_mode");            
-                        }
+                        set_scan_mode_connectable(true);
                     }
+                } else {
+                    set_scan_mode_connectable(true);   
                 }
             } else if (a2d->conn_stat.state == ESP_A2D_CONNECTION_STATE_CONNECTED){
                 ESP_LOGI(BT_AV_TAG, "ESP_A2D_CONNECTION_STATE_CONNECTED");
-#ifdef CURRENT_ESP_IDF
-                esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
-#else
-                esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_NONE);
-#endif  
+                set_scan_mode_connectable(false);   
                 connection_rety_count = 0;
                 if (is_i2s_output) i2s_start(i2s_port);
                 // record current connection
@@ -464,17 +460,21 @@ void  BluetoothA2DPSink::av_hdl_a2d_evt(uint16_t event, void *p_param)
             audio_type = esp_a2d_callback_param->audio_cfg.mcc.type;
             a2d = (esp_a2d_cb_param_t *)(p_param);
             ESP_LOGI(BT_AV_TAG, "a2dp audio_cfg_cb , codec type %d", a2d->audio_cfg.mcc.type);
+
+            // determine sample rate
+            i2s_config.sample_rate = 16000;
+            char oct0 = a2d->audio_cfg.mcc.cie.sbc[0];
+            if (oct0 & (0x01 << 6)) {
+                i2s_config.sample_rate = 32000;
+            } else if (oct0 & (0x01 << 5)) {
+                i2s_config.sample_rate = 44100;
+            } else if (oct0 & (0x01 << 4)) {
+                i2s_config.sample_rate = 48000;
+            }
+            ESP_LOGI(BT_AV_TAG, "a2dp audio_cfg_cb , sample_rate %d", i2s_config.sample_rate );
+
             // for now only SBC stream is supported
             if (is_i2s_output && a2d->audio_cfg.mcc.type == ESP_A2D_MCT_SBC) {
-                i2s_config.sample_rate = 16000;
-                char oct0 = a2d->audio_cfg.mcc.cie.sbc[0];
-                if (oct0 & (0x01 << 6)) {
-                    i2s_config.sample_rate = 32000;
-                } else if (oct0 & (0x01 << 5)) {
-                    i2s_config.sample_rate = 44100;
-                } else if (oct0 & (0x01 << 4)) {
-                    i2s_config.sample_rate = 48000;
-                }
                 
                 i2s_set_clk(i2s_port, i2s_config.sample_rate, i2s_config.bits_per_sample, (i2s_channel_t)2);
 
@@ -493,14 +493,10 @@ void  BluetoothA2DPSink::av_hdl_a2d_evt(uint16_t event, void *p_param)
     }
 }
 
-#ifdef CURRENT_ESP_IDF
-void BluetoothA2DPSink::set_discoverability(esp_bt_discovery_mode_t d) {
-  discoverability = d;
-  if (get_connection_state() == ESP_A2D_CONNECTION_STATE_DISCONNECTED || d != ESP_BT_NON_DISCOVERABLE) {
-    esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, discoverability);
-  }
+uint16_t BluetoothA2DPSink::sample_rate(){
+    return i2s_config.sample_rate;
 }
-#endif
+
 
 void BluetoothA2DPSink::av_new_track()
 {
@@ -614,13 +610,7 @@ void BluetoothA2DPSink::av_hdl_stack_evt(uint16_t event, void *p_param)
 
             /* set discoverable and connectable mode, wait to be connected */
             ESP_LOGD(BT_AV_TAG, "esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE)");
-    #ifdef CURRENT_ESP_IDF
-            if (esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, discoverability)!=ESP_OK){
-    #else
-            if (esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE)!=ESP_OK){
-    #endif
-                ESP_LOGE(BT_AV_TAG,"esp_bt_gap_set_scan_mode");            
-            }
+            set_scan_mode_connectable(true);
 
             break;
         }
@@ -698,12 +688,14 @@ void BluetoothA2DPSink::audio_data_callback(const uint8_t *data, uint32_t len) {
     }
 
    
-   if (stream_reader!=NULL){
-   	  stream_reader(data, len);
+   if (stream_reader!=nullptr){
+        ESP_LOGD(BT_AV_TAG, "stream_reader");
+   	    (*stream_reader)(data, len);
    }
    
-   if (data_received!=NULL){
-   	  data_received();
+   if (data_received!=nullptr){
+        ESP_LOGD(BT_AV_TAG, "data_received");
+   	    (*data_received)();
    }
 }
 
@@ -847,3 +839,41 @@ extern "C" void app_rc_ct_callback_2(esp_avrc_ct_cb_event_t event, esp_avrc_ct_c
     ESP_LOGD(BT_AV_TAG, "%s", __func__);
     BluetoothA2DPSinkCallbacks::app_rc_ct_callback(event, param);
 }
+
+
+#ifdef CURRENT_ESP_IDF
+void BluetoothA2DPSink::set_scan_mode_connectable(bool connectable) {
+    if (connectable){
+        if (esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, discoverability)!=ESP_OK) {
+            ESP_LOGE(BT_AV_TAG,"esp_bt_gap_set_scan_mode");            
+        } 
+    } else {
+        if (esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE)) {
+            ESP_LOGE(BT_AV_TAG,"esp_bt_gap_set_scan_mode");            
+        }    
+    }
+}
+
+void BluetoothA2DPSink::set_discoverability(esp_bt_discovery_mode_t d) {
+  discoverability = d;
+  if (get_connection_state() == ESP_A2D_CONNECTION_STATE_DISCONNECTED || d != ESP_BT_NON_DISCOVERABLE) {
+    esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, discoverability);
+  }
+}
+
+#else 
+
+void BluetoothA2DPSink::set_scan_mode_connectable(bool connectable) {
+    if (connectable){
+        if (esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_CONNECTABLE_DISCOVERABLE)!=ESP_OK){
+            ESP_LOGE(BT_AV_TAG,"esp_bt_gap_set_scan_mode");            
+        } 
+    } else {
+        if (esp_bt_gap_set_scan_mode(ESP_BT_SCAN_MODE_NONE)!=ESP_OK){
+            ESP_LOGE(BT_AV_TAG,"esp_bt_gap_set_scan_mode");            
+        }    
+    }
+}
+
+#endif
+
