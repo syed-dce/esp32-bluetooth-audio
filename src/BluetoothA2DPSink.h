@@ -136,8 +136,10 @@ class BluetoothA2DPSink {
     virtual void next();
     /// AVRC previouse
     virtual void previous();
-    
+    /// mix stereo into single mono signal
     virtual void set_mono_downmix(bool enabled) { mono_downmix = enabled; }
+    /// Defines the bits per sample for output (if > 16 output will be expanded)
+    virtual void set_bits_per_sample(int bps) { i2s_config.bits_per_sample = (i2s_bits_per_sample_t) bps; }
 
     uint16_t sample_rate();
 
@@ -170,6 +172,7 @@ class BluetoothA2DPSink {
     bool is_auto_reconnect;
     esp_bd_addr_t last_connection = {0,0,0,0,0,0};
     bool is_i2s_output = true;
+    bool player_init = false;
     bool mono_downmix = false;
 #ifdef CURRENT_ESP_IDF
     esp_bt_discovery_mode_t discoverability = ESP_BT_GENERAL_DISCOVERABLE;
