@@ -7,7 +7,7 @@
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions andun
+// See the License for the specific language governing permissions and
 // limitations under the License.
 //
 // Copyright 2015-2016 Espressif Systems (Shanghai) PTE LTD
@@ -64,6 +64,23 @@ BluetoothA2DPSink::~BluetoothA2DPSink() {
     if (app_task_queue!=NULL){
         end();
     }
+}
+
+void BluetoothA2DPSink::disconnect()
+{
+    ESP_LOGI(BT_AV_TAG, "discconect a2d");
+    esp_err_t status = esp_a2d_sink_disconnect(last_connection);
+    if (status == ESP_FAIL)
+    {
+        ESP_LOGE(BT_AV_TAG, "Failed disconnecting to device!");
+    }
+    // clean_last_connection();
+
+    // ESP_LOGI(BT_AV_TAG, "deinit avrc");
+    // if (esp_avrc_ct_deinit() != ESP_OK)
+    // {
+    //     ESP_LOGE(BT_AV_TAG, "Failed to deinit avrc");
+    // }
 }
 
 void BluetoothA2DPSink::end(bool release_memory) {
@@ -510,7 +527,7 @@ void BluetoothA2DPSink::av_new_track()
 {
     ESP_LOGD(BT_AV_TAG, "%s", __func__);
     //Register notifications and request metadata
-    esp_avrc_ct_send_metadata_cmd(0, ESP_AVRC_MD_ATTR_TITLE | ESP_AVRC_MD_ATTR_ARTIST | ESP_AVRC_MD_ATTR_ALBUM | ESP_AVRC_MD_ATTR_GENRE);
+    esp_avrc_ct_send_metadata_cmd(0, ESP_AVRC_MD_ATTR_TITLE | ESP_AVRC_MD_ATTR_ARTIST | ESP_AVRC_MD_ATTR_ALBUM | ESP_AVRC_MD_ATTR_TRACK_NUM | ESP_AVRC_MD_ATTR_NUM_TRACKS | ESP_AVRC_MD_ATTR_GENRE);
     esp_avrc_ct_send_register_notification_cmd(1, ESP_AVRC_RN_TRACK_CHANGE, 0);
 }
 

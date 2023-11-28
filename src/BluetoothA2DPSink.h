@@ -100,8 +100,11 @@ class BluetoothA2DPSink {
     /// starts the I2S bluetooth sink with the inidicated name
     virtual void start(const char* name, bool auto_reconect=true);
 
-    /// starts the I2S bluetooth sink with the inidicated name - if you release the memory a future start is not possible
+    /// ends the I2S bluetooth sink with the indicated name - if you release the memory a future start is not possible
     virtual void end(bool release_memory=false);
+    
+    /// Disconnects the remote a2d connection, allowing for a reconnection
+    virtual void disconnect();
 
     /// Determine the actual audio state
     virtual esp_a2d_audio_state_t get_audio_state();
@@ -140,11 +143,12 @@ class BluetoothA2DPSink {
     virtual void set_mono_downmix(bool enabled) { mono_downmix = enabled; }
     /// Defines the bits per sample for output (if > 16 output will be expanded)
     virtual void set_bits_per_sample(int bps) { i2s_config.bits_per_sample = (i2s_bits_per_sample_t) bps; }
-
+    
+    /// Provides the actually set data rate (in samples per second)
     uint16_t sample_rate();
 
 #ifdef CURRENT_ESP_IDF
-    // Bluetooth discoverability
+    /// Bluetooth discoverability
     virtual void set_discoverability(esp_bt_discovery_mode_t d);
 #endif
 
