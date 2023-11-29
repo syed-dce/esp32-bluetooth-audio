@@ -47,7 +47,8 @@ BluetoothA2DPSink::BluetoothA2DPSink() {
             .intr_alloc_flags = 0, // default interrupt priority
             .dma_buf_count = 8,
             .dma_buf_len = 64,
-            .use_apll = false
+            .use_apll = false,
+            .tx_desc_auto_clear = true // avoiding noise in case of data unavailability
         };
 
         // setup default pins
@@ -74,13 +75,8 @@ void BluetoothA2DPSink::disconnect()
     {
         ESP_LOGE(BT_AV_TAG, "Failed disconnecting to device!");
     }
-    // clean_last_connection();
-
-    // ESP_LOGI(BT_AV_TAG, "deinit avrc");
-    // if (esp_avrc_ct_deinit() != ESP_OK)
-    // {
-    //     ESP_LOGE(BT_AV_TAG, "Failed to deinit avrc");
-    // }
+    // reconnect should not work after end
+    clean_last_connection();
 }
 
 void BluetoothA2DPSink::end(bool release_memory) {
