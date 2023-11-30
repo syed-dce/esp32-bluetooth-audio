@@ -16,11 +16,7 @@
 #include "BluetoothA2DPSource.h"
 
 #define BT_APP_SIG_WORK_DISPATCH            (0x01)
-#define BT_APP_CORE_TAG                     "BT_APP_CORE"
 #define BT_APP_SIG_WORK_DISPATCH            (0x01)
-#define BT_AV_TAG                           "BT_AV"
-#define BT_RC_CT_TAG                        "RCCT"
-#define BT_APP_TAG                          "BT_API"
 
 #define APP_RC_CT_TL_GET_CAPS               (0)
 #define APP_RC_CT_TL_RN_VOLUME_CHANGE       (1)
@@ -108,7 +104,7 @@ extern "C" int32_t ccall_get_data_default(uint8_t *data, int32_t len) {
 
 
 BluetoothA2DPSource::BluetoothA2DPSource() {
-    ESP_LOGD(APP, "x%x, ", __func__);
+    ESP_LOGD(APP, "%s, ", __func__);
     self_BluetoothA2DPSource = this;
     this->ssp_enabled = false;
     this->pin_type = ESP_BT_PIN_TYPE_VARIABLE;
@@ -135,7 +131,7 @@ bool BluetoothA2DPSource::isConnected(){
 }
 
 void BluetoothA2DPSource::setPinCode(char *pin_code, esp_bt_pin_type_t pin_type){
-    ESP_LOGD(APP, "x%x, ", __func__);
+    ESP_LOGD(APP, "%s, ", __func__);
     this->pin_type = pin_type;
     this->pin_code_len = strlen(pin_code);
     strcpy((char*)this->pin_code, pin_code);
@@ -147,7 +143,7 @@ void BluetoothA2DPSource::start(char* name, music_data_channels_cb_t callback, b
 }
 
 void BluetoothA2DPSource::start(std::vector<char*> names, music_data_channels_cb_t callback, bool is_ssp_enabled) {
-    ESP_LOGD(APP, "x%x, ", __func__);
+    ESP_LOGD(APP, "%s, ", __func__);
     if (callback!=NULL){
         // we use the indicated callback
         this->data_stream_channels_callback = callback;
@@ -163,8 +159,9 @@ void BluetoothA2DPSource::startRaw(char* name, music_data_cb_t callback, bool is
     startRaw(names, callback, is_ssp_enabled);
 }
 
+
 void BluetoothA2DPSource::startRaw(std::vector<char*> names, music_data_cb_t callback, bool is_ssp_enabled) {
-    ESP_LOGD(APP, "x%x, ", __func__);
+    ESP_LOGD(APP, "%s, ", __func__);
     this->ssp_enabled = is_ssp_enabled;
     this->bt_names = names;
     this->data_stream_callback = callback;
@@ -181,18 +178,6 @@ void BluetoothA2DPSource::startRaw(std::vector<char*> names, music_data_cb_t cal
 
     if (reset_ble) {
         ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_BLE));
-
-    // esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
-
-    // if (esp_bt_controller_init(&bt_cfg) != ESP_OK) {
-    //     ESP_LOGE(BT_AV_TAG, "%s initialize controller failed\n", __func__);
-    //     return;
-    // }
-
-    // if (esp_bt_controller_enable(ESP_BT_MODE_CLASSIC_BT) != ESP_OK) {
-    //     ESP_LOGE(BT_AV_TAG, "%s enable controller failed\n", __func__);
-    //     return;
-    // }
 
         if (!btStart()) {
             ESP_LOGE(BT_AV_TAG,"Failed to initialize controller");
@@ -794,8 +779,6 @@ void BluetoothA2DPSource::bt_app_rc_ct_cb(esp_avrc_ct_cb_event_t event, esp_avrc
     case ESP_AVRC_CT_PASSTHROUGH_RSP_EVT:
     case ESP_AVRC_CT_CHANGE_NOTIFY_EVT:
     case ESP_AVRC_CT_REMOTE_FEATURES_EVT: {
-    //case ESP_AVRC_CT_GET_RN_CAPABILITIES_RSP_EVT:
-    //case ESP_AVRC_CT_SET_ABSOLUTE_VOLUME_RSP_EVT: {
         bt_app_work_dispatch(ccall_bt_av_hdl_avrc_ct_evt, event, param, sizeof(esp_avrc_ct_cb_param_t), NULL);
         break;
     }
@@ -863,18 +846,6 @@ void BluetoothA2DPSource::bt_av_hdl_avrc_ct_evt(uint16_t event, void *p_param)
         ESP_LOGI(BT_RC_CT_TAG, "AVRC remote features");
         break;
     }
-    // case ESP_AVRC_CT_GET_RN_CAPABILITIES_RSP_EVT: {
-    //     ESP_LOGI(BT_RC_CT_TAG, "remote rn_cap: count %d, bitmask 0x%x", rc->get_rn_caps_rsp.cap_count,
-    //              rc->get_rn_caps_rsp.evt_set.bits);
-    //     s_avrc_peer_rn_cap.bits = rc->get_rn_caps_rsp.evt_set.bits;
-
-    //     bt_av_volume_changed();
-    //     break;
-    // }
-    // case ESP_AVRC_CT_SET_ABSOLUTE_VOLUME_RSP_EVT: {
-    //     ESP_LOGI(BT_RC_CT_TAG, "Set absolute volume rsp: volume %d", rc->set_volume_rsp.volume);
-    //     break;
-    // }
 
     default:
         ESP_LOGE(BT_RC_CT_TAG, "%s unhandled evt %d", __func__, event);
@@ -904,10 +875,10 @@ int32_t BluetoothA2DPSource::get_data_default(uint8_t *data, int32_t len) {
         sound_data_current_pos+=result_len;
         if (result_len<=0){
             if (sound_data->doLoop()){
-                ESP_LOGD(BT_APP_TAG, "x%x - end of data: restarting", __func__);
+                ESP_LOGD(BT_APP_TAG, "%s - end of data: restarting", __func__);
                 sound_data_current_pos = 0;            
             } else {
-                ESP_LOGD(BT_APP_TAG, "x%x - end of data: stopping", __func__);
+                ESP_LOGD(BT_APP_TAG, "%s - end of data: stopping", __func__);
                 has_sound_data = false;
             }
         }
