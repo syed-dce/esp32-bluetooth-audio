@@ -289,6 +289,11 @@ void BluetoothA2DPSink::init_i2s() {
             player_init = false; //reset player
         }
 
+#ifdef ESP32C3
+        if (i2s_set_pin(i2s_port, &pin_config) != ESP_OK) {
+            ESP_LOGE(BT_AV_TAG,"i2s_set_pin failed");
+        }
+#else
         // pins are only relevant when music is not sent to internal DAC
         if (i2s_config.mode & I2S_MODE_DAC_BUILT_IN) {
             if (i2s_set_pin(i2s_port, nullptr)!= ESP_OK) {
@@ -303,9 +308,11 @@ void BluetoothA2DPSink::init_i2s() {
                 ESP_LOGE(BT_AV_TAG,"i2s_set_pin failed");
             }
         }
+#endif
     }
 }
 
+#ifndef ESP32C3
 esp_err_t BluetoothA2DPSink::i2s_mclk_pin_select(const uint8_t pin) {
     if(pin != 0 && pin != 1 && pin != 3) {
         ESP_LOGE(BT_APP_TAG, "Only support GPIO0/GPIO1/GPIO3, gpio_num:%d", pin);
@@ -329,6 +336,7 @@ esp_err_t BluetoothA2DPSink::i2s_mclk_pin_select(const uint8_t pin) {
     }
     return ESP_OK;
 }
+#endif
 
 esp_a2d_audio_state_t BluetoothA2DPSink::get_audio_state() {
   return audio_state;
@@ -711,6 +719,9 @@ void  BluetoothA2DPSink::av_hdl_a2d_evt(uint16_t event, void *p_param)
                 i2s_config.sample_rate = 48000;
             }
             ESP_LOGI(BT_AV_TAG, "a2dp audio_cfg_cb , sample_rate %d", i2s_config.sample_rate );
+            if (sample_rate_callback!=nullptr){
+                sample_rate_callback(i2s_config.sample_rate);
+            }
 
             // for now only SBC stream is supported
             if (player_init == false && is_i2s_output && a2d->audio_cfg.mcc.type == ESP_A2D_MCT_SBC) {
