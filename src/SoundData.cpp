@@ -11,7 +11,6 @@
 // limitations under the License.
 //
 // Copyright 2020  
-// Copyright 2015-2016 Espressif Systems (Shanghai) PTE LTD
 
 #include "SoundData.h"
 
