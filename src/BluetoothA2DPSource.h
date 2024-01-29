@@ -73,12 +73,12 @@ class BluetoothA2DPSource : public BluetoothA2DPCommon {
 
     /// activate / deactivate the automatic reconnection to the last address (per default this is on)
     void set_auto_reconnect(bool active){
-      this->auto_reconnect = active;
+      this->is_auto_reconnect = active;
     }
 
     /// automatically tries to reconnect to the indicated address
     void set_auto_reconnect(esp_bd_addr_t addr){
-      this->auto_reconnect = true;
+      this->is_auto_reconnect = true;
     	memcpy(last_connection,addr,ESP_BD_ADDR_LEN);
     }
 
@@ -162,7 +162,6 @@ class BluetoothA2DPSource : public BluetoothA2DPCommon {
     const char *dev_name = "ESP32_A2DP_SRC";
 
     bool ssp_enabled=false;
-    bool auto_reconnect=true;
     const char* bt_name;
     std::vector<const char*> bt_names;
 

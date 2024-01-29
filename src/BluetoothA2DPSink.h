@@ -21,11 +21,6 @@ extern "C" {
 
 #define APP_SIG_WORK_DISPATCH (0x01)
 
-#ifndef AUTOCONNECT_TRY_NUM
-#define AUTOCONNECT_TRY_NUM 1
-#endif
-
-
 #ifndef BT_AV_TAG
 #define BT_AV_TAG               "BT_AV"
 #endif
@@ -103,7 +98,10 @@ class BluetoothA2DPSink : public BluetoothA2DPCommon {
     virtual void set_i2s_config(i2s_config_t i2s_config);
 
     /// starts the I2S bluetooth sink with the inidicated name
-    virtual void start(const char* name, bool auto_reconect=true);
+    virtual void start(const char* name, bool auto_reconect);
+
+    /// starts the I2S bluetooth sink with the inidicated name
+    virtual void start(const char* name);
 
     /// ends the I2S bluetooth sink with the indicated name - if you release the memory a future start is not possible
     virtual void end(bool release_memory=false);
@@ -202,6 +200,13 @@ class BluetoothA2DPSink : public BluetoothA2DPCommon {
         swap_left_right = swap;
     }
 
+    /// Defines the number of times that the system tries to automatically reconnect to the last system
+    virtual void set_try_reconnect_max_count(int count){
+        is_auto_reconnect = true;
+        try_reconnect_max_count = count;
+    }
+    
+
  #ifdef CURRENT_ESP_IDF
     /// Get the name of the connected source device
     virtual const char* get_connected_source_name();
@@ -218,7 +223,6 @@ class BluetoothA2DPSink : public BluetoothA2DPCommon {
     //esp_a2d_audio_state_t m_audio_state = ESP_A2D_AUDIO_STATE_STOPPED;
     esp_a2d_mct_t audio_type;
     char pin_code_str[20];
-    bool is_auto_reconnect;
     bool is_i2s_output = true;
     bool player_init = false;
     bool mono_downmix = false;
@@ -244,6 +248,7 @@ class BluetoothA2DPSink : public BluetoothA2DPCommon {
     bool (*address_validator)(esp_bd_addr_t remote_bda) = nullptr;
     void (*sample_rate_callback)(uint16_t rate)=nullptr;
     bool swap_left_right = false;
+    int try_reconnect_max_count = AUTOCONNECT_TRY_NUM;
 
 #ifdef CURRENT_ESP_IDF
     esp_avrc_rn_evt_cap_mask_t s_avrc_peer_rn_cap;
@@ -286,6 +291,11 @@ class BluetoothA2DPSink : public BluetoothA2DPCommon {
     virtual void av_hdl_a2d_evt(uint16_t event, void *p_param);
     // avrc event handler 
     virtual void av_hdl_avrc_evt(uint16_t event, void *p_param);
+
+    // split up long handlers
+    virtual void handle_connection_state(uint16_t event, void *p_param);
+    virtual void handle_audio_state(uint16_t event, void *p_param);
+    virtual void handle_audio_cfg(uint16_t event, void *p_param);
 
 #ifdef CURRENT_ESP_IDF
     virtual void volume_set_by_local_host(uint8_t volume);
