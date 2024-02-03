@@ -430,6 +430,10 @@ void BluetoothA2DPSink::app_gap_callback(esp_bt_gap_cb_event_t event, esp_bt_gap
 
             } else {
                 ESP_LOGE(BT_AV_TAG, "authentication failed, status:%d", param->auth_cmpl.stat);
+                // reset pin_code data to "undefined" after authentication failure
+                // just like when in disconnected state
+                pin_code_int = 0;
+                pin_code_request = Undefined;
             }
             break;
         }
@@ -612,7 +616,7 @@ void BluetoothA2DPSink::handle_audio_state(uint16_t event, void *p_param){
     
     // callback on state change
     audio_state = a2d->audio_stat.state;
-    if (audio_state_callback!=nullptr && audio_state){
+    if (audio_state_callback!=nullptr){
         audio_state_callback(a2d->audio_stat.state, audio_state_obj);
     }
 
@@ -855,7 +859,7 @@ void BluetoothA2DPSink::av_hdl_stack_evt(uint16_t event, void *p_param)
                 esp_avrc_tg_register_callback(ccall_app_rc_tg_callback);
                 esp_avrc_rn_evt_cap_mask_t evt_set = {0};
                 esp_avrc_rn_evt_bit_mask_operation(ESP_AVRC_BIT_MASK_OP_SET, &evt_set, ESP_AVRC_RN_VOLUME_CHANGE);
-                if(esp_avrc_tg_set_rn_evt_cap(&evt_set) == ESP_OK){
+                if(esp_avrc_tg_set_rn_evt_cap(&evt_set) != ESP_OK){
                     ESP_LOGE(BT_AV_TAG,"esp_avrc_tg_set_rn_evt_cap failed");
                 }
             } else {
@@ -1042,6 +1046,12 @@ void BluetoothA2DPSink::next(){
 }
 void BluetoothA2DPSink::previous(){
     execute_avrc_command(ESP_AVRC_PT_CMD_BACKWARD);
+}
+void BluetoothA2DPSink::fast_forward(){
+    execute_avrc_command(ESP_AVRC_PT_CMD_FAST_FORWARD);
+}
+void BluetoothA2DPSink::rewind(){
+    execute_avrc_command(ESP_AVRC_PT_CMD_REWIND);
 }
 
 void BluetoothA2DPSink::set_volume(uint8_t volume)
