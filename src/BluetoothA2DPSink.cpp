@@ -48,6 +48,9 @@ BluetoothA2DPSink::BluetoothA2DPSink() {
             .data_in_num = I2S_PIN_NO_CHANGE
         };
     }
+#ifdef ESP_IDF_4
+    _lock_init(&s_volume_lock);
+#endif
 }
 
 BluetoothA2DPSink::~BluetoothA2DPSink() {
@@ -928,7 +931,7 @@ void BluetoothA2DPSink::audio_data_callback(const uint8_t *data, uint32_t len) {
     ESP_LOGD(BT_AV_TAG, "%s", __func__);
 
     // adjust the volume
-    volume_control()->update_audio_data((Frame*)data, len/4, s_volume, mono_downmix, is_volume_used);
+    volume_control()->update_audio_data((Frame*)data, len/4, mono_downmix, is_volume_used);
 
     // make data available via callback
     if (stream_reader!=nullptr){
@@ -1054,6 +1057,7 @@ void BluetoothA2DPSink::set_volume(uint8_t volume)
       volume = 0x7f;
   } 
   s_volume = volume & 0x7f;
+  volume_control()->set_volume(s_volume);
 
 #ifdef ESP_IDF_4
   volume_set_by_local_host(s_volume);
@@ -1191,6 +1195,8 @@ void BluetoothA2DPSink::volume_set_by_controller(uint8_t volume)
     _lock_release(&s_volume_lock);
     is_volume_used = true;
     
+    volume_control()->set_volume(s_volume);
+
     if (bt_volumechange!=nullptr){
         (*bt_volumechange)(s_volume);
     }    

@@ -39,7 +39,8 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "SoundData.h"
-#include "VolumeControl.h"
+#include "A2DPVolumeControl.h"
+#include "esp_task_wdt.h"
 
 #ifdef ARDUINO_ARCH_ESP32
 #include "esp32-hal-log.h"
@@ -114,14 +115,21 @@ class BluetoothA2DPCommon {
         //     return is_connected();
         // }
 
-        /// Changes the volume (use the range 0-100)
-        virtual void set_volume(uint8_t volume) = 0;
-        
-        /// Determines the volume
-        virtual int get_volume() = 0;
+        /// Sets the volume (range 0 - 255)
+        virtual void set_volume(uint8_t volume){
+            ESP_LOGI(BT_AV_TAG, "set_volume: %d", volume);
+            volume_value = volume;
+            volume_control()->set_volume(volume);
+            is_volume_used = true;
+        }
+            
+        /// Determines the actual volume
+        virtual int get_volume(){
+            return is_volume_used ? volume_value : 0;
+        }
 
         /// you can define a custom VolumeControl implementation
-        virtual void set_volume_control(VolumeControl *ptr){
+        virtual void set_volume_control(A2DPVolumeControl *ptr){
             volume_control_ptr = ptr;
         }
 
@@ -157,6 +165,7 @@ class BluetoothA2DPCommon {
             task_priority = priority;
         }
 
+
 #ifdef ESP_IDF_4
     /// Bluetooth discoverability
     virtual void set_discoverability(esp_bt_discovery_mode_t d);
@@ -165,8 +174,8 @@ class BluetoothA2DPCommon {
     protected:
         bool is_auto_reconnect=true;
         uint32_t debounce_ms = 0;
-        DefaultVolumeControl default_volume_control;
-        VolumeControl *volume_control_ptr = nullptr;
+        A2DPDefaultVolumeControl default_volume_control;
+        A2DPVolumeControl *volume_control_ptr = nullptr;
         esp_bd_addr_t last_connection = {0,0,0,0,0,0};
         bool is_start_disabled = false;
         void (*connection_state_callback)(esp_a2d_connection_state_t state, void* obj) = nullptr;
@@ -178,6 +187,10 @@ class BluetoothA2DPCommon {
         esp_a2d_audio_state_t audio_state = ESP_A2D_AUDIO_STATE_STOPPED;
         esp_a2d_connection_state_t connection_state = ESP_A2D_CONNECTION_STATE_DISCONNECTED;
         UBaseType_t task_priority = configMAX_PRIORITIES - 3;
+        // volume 
+        uint8_t volume_value = 0;
+        bool is_volume_used = false;
+
 #ifdef ESP_IDF_4
         esp_bt_discovery_mode_t discoverability = ESP_BT_GENERAL_DISCOVERABLE;
 #endif
@@ -192,7 +205,7 @@ class BluetoothA2DPCommon {
         virtual void set_scan_mode_connectable(bool connectable);
 
         /// provides access to the VolumeControl object
-        virtual VolumeControl* volume_control() {
+        virtual A2DPVolumeControl* volume_control() {
             return volume_control_ptr !=nullptr ? volume_control_ptr : &default_volume_control;
         }
 
