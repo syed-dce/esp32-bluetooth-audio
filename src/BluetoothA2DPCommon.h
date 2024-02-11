@@ -120,6 +120,7 @@ class BluetoothA2DPCommon {
             ESP_LOGI(BT_AV_TAG, "set_volume: %d", volume);
             volume_value = volume;
             volume_control()->set_volume(volume);
+            volume_control()->set_enabled(true);
             is_volume_used = true;
         }
             
@@ -163,6 +164,11 @@ class BluetoothA2DPCommon {
         /// defines the task priority (the default value is configMAX_PRIORITIES - 3)
         void set_task_priority(UBaseType_t priority){
             task_priority = priority;
+        }
+
+        /// Provides the address of the last device
+        virtual esp_bd_addr_t* get_last_peer_address() {
+            return &last_connection;
         }
 
 

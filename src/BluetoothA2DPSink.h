@@ -170,7 +170,9 @@ class BluetoothA2DPSink : public BluetoothA2DPCommon {
         set_mono_downmix(channels==I2S_CHANNEL_MONO);
     }
     /// mix stereo into single mono signal
-    virtual void set_mono_downmix(bool enabled) { mono_downmix = enabled; }
+    virtual void set_mono_downmix(bool enabled) {
+        volume_control()->set_mono_downmix(enabled);
+    }
     /// Defines the bits per sample for output (if > 16 output will be expanded)
     virtual void set_bits_per_sample(int bps) { i2s_config.bits_per_sample = (i2s_bits_per_sample_t) bps; }
     
@@ -210,7 +212,22 @@ class BluetoothA2DPSink : public BluetoothA2DPCommon {
         reconnect_on_normal_disconnect = afterNormalDisconnect;
         try_reconnect_max_count = count;
     }
-    
+
+    /// Provides the address of the connected device
+    virtual esp_bd_addr_t* get_current_peer_address() {
+        return &peer_bd_addr;
+    }
+
+    /// Defines the queue size of the event task
+    void set_event_queue_size(int size){
+        event_queue_size = size;
+    }
+
+    /// Defines the stack size of the event task
+    void set_event_stack_size(int size){
+        event_stack_size = size;
+    }
+
 
  #ifdef ESP_IDF_4
     /// Get the name of the connected source device
@@ -230,7 +247,6 @@ class BluetoothA2DPSink : public BluetoothA2DPCommon {
     char pin_code_str[20] = {0};
     bool is_i2s_output = true;
     bool player_init = false;
-    bool mono_downmix = false;
     i2s_channel_t i2s_channels = I2S_CHANNEL_STEREO;
     i2s_port_t i2s_port = I2S_NUM_0; 
     int connection_rety_count = 0;
@@ -238,7 +254,6 @@ class BluetoothA2DPSink : public BluetoothA2DPCommon {
     static const esp_spp_mode_t esp_spp_mode = ESP_SPP_MODE_CB;
     _lock_t s_volume_lock;
     uint8_t s_volume = 0;
-    bool is_volume_used = false;
     bool s_volume_notify;
     int pin_code_int = 0;
     PinCodeRequest pin_code_request = Undefined;
@@ -256,6 +271,8 @@ class BluetoothA2DPSink : public BluetoothA2DPCommon {
     int try_reconnect_max_count = AUTOCONNECT_TRY_NUM;
     bool reconnect_on_normal_disconnect = false;
     bool end_in_progress = false;
+    int event_queue_size = 20;
+    int event_stack_size = 3072;
 
 #ifdef ESP_IDF_4
     esp_avrc_rn_evt_cap_mask_t s_avrc_peer_rn_cap;
