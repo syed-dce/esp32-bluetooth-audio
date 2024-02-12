@@ -14,6 +14,7 @@
 
 #pragma once
 #include "BluetoothA2DPCommon.h"
+#include "freertos/ringbuf.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,6 +35,7 @@ extern "C" void ccall_app_a2d_callback(esp_a2d_cb_event_t event, esp_a2d_cb_para
 extern "C" void ccall_app_rc_ct_callback(esp_avrc_ct_cb_event_t event, esp_avrc_ct_cb_param_t *param);
 extern "C" void ccall_app_gap_callback(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param);
 extern "C" void ccall_app_task_handler(void *arg);
+extern "C" void ccall_i2s_task_handler(void *arg);
 extern "C" void ccall_audio_data_callback(const uint8_t *data, uint32_t len);
 extern "C" void ccall_av_hdl_stack_evt(uint16_t event, void *p_param);
 extern "C" void ccall_av_hdl_a2d_evt(uint16_t event, void *p_param);
@@ -65,6 +67,8 @@ class BluetoothA2DPSink : public BluetoothA2DPCommon {
     friend void ccall_app_gap_callback(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param);
     /// task handler
     friend void ccall_app_task_handler(void *arg);
+    /// task hander for i2s 
+    friend void ccall_i2s_task_handler(void *arg);
     /// Callback for music stream 
     friend void ccall_audio_data_callback(const uint8_t *data, uint32_t len);
     /// av event handler
@@ -218,16 +222,25 @@ class BluetoothA2DPSink : public BluetoothA2DPCommon {
         return &peer_bd_addr;
     }
 
-    /// Defines the queue size of the event task
+    /// Defines the queue size of the event task 
     void set_event_queue_size(int size){
         event_queue_size = size;
     }
 
-    /// Defines the stack size of the event task
+    /// Defines the stack size of the event task (in bytes)
     void set_event_stack_size(int size){
         event_stack_size = size;
     }
 
+    /// Defines the stack size of the i2s task (in bytes)
+    void set_i2s_stack_size(int size){
+        i2s_stack_size = size;
+    }
+
+    /// Defines the ringbuffer size used by the i2s task (in bytes)
+    void set_i2s_ringbuffer_size(int size){
+        i2s_ringbuffer_size = size;
+    }
 
  #ifdef ESP_IDF_4
     /// Get the name of the connected source device
@@ -238,6 +251,9 @@ class BluetoothA2DPSink : public BluetoothA2DPCommon {
     // protected data
     xQueueHandle app_task_queue = nullptr;
     xTaskHandle app_task_handle = nullptr;
+    xTaskHandle s_bt_i2s_task_handle = NULL;  /* handle of I2S task */
+    RingbufHandle_t s_ringbuf_i2s = NULL;     /* handle of ringbuffer for I2S */
+
     i2s_config_t i2s_config;
     i2s_pin_config_t pin_config;    
     const char * bt_name = nullptr;
@@ -273,6 +289,8 @@ class BluetoothA2DPSink : public BluetoothA2DPCommon {
     bool end_in_progress = false;
     int event_queue_size = 20;
     int event_stack_size = 3072;
+    int i2s_stack_size = 2048;
+    int i2s_ringbuffer_size = 4 * 1024;
 
 #ifdef ESP_IDF_4
     esp_avrc_rn_evt_cap_mask_t s_avrc_peer_rn_cap;
@@ -336,7 +354,32 @@ class BluetoothA2DPSink : public BluetoothA2DPCommon {
 #else
     virtual void av_notify_evt_handler(uint8_t event_id, uint32_t event_parameter);
 #endif    
+
+    /// i2s task with ringubffer
+    virtual size_t write_ringbuf(const uint8_t *data, size_t size);
+    virtual void i2s_task_handler(void *arg);
+    virtual void bt_i2s_task_start_up(void);
+    virtual void bt_i2s_task_shut_down(void);
+    /// writes the data to i2s
+    size_t i2s_write_data(const uint8_t* data, size_t item_size);
         
+};
+
+
+/**
+ * @brief BluetoothA2DPSinkMinRAM. The BluetoothA2DPSink is using a separate Task with an additinal Queue to write the I2S data.
+ * This implementation is using the legacy logic which writes directly to I2S w/o task. This leaves more RAM available to the
+ * application.
+ * 
+ */
+class BluetoothA2DPSinkMinRAM : public BluetoothA2DPSink {
+    public:
+        void bt_i2s_task_start_up(void) override {}
+        void bt_i2s_task_shut_down(void) override {}
+        void i2s_task_handler(void *arg) override {}
+        size_t write_ringbuf(const uint8_t *data, size_t size){
+            return i2s_write_data(data, size);
+        }
 };
 
 
